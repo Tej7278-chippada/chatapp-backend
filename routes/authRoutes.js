@@ -75,16 +75,16 @@ router.post('/login', async (req, res) => {
   const { username, password } = req.body;
 
   try {
-    const { username, password } = req.body;
+    // const { username, password } = req.body;
     const user = await User.findOne({ username });
     if (!user) {
-      return res.status(400).json({ message: `Your entered username doesn't match to the existing one` });
+      return res.status(404).json({ message: `Username ${username} doesn't exist.` });
     }
 
     // Compare passwords
     const isPasswordMatch = await user.comparePassword(password);
     if (!isPasswordMatch) {
-      return res.status(400).json({ message: `Password not matched with this username: ${username}` });
+      return res.status(401).json({ message: `Password doesn't match for username: ${username}` });
     }
 
     // Generate a JWT token
