@@ -87,13 +87,17 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ message: `Password doesn't match for username: ${username}` });
     }
 
-    // Generate a JWT token
-    const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: '1h' });
+    // Generate a JWT token valid for 1 hour
+    const token = jwt.sign({ id: user._id, tokenusername: user.username }, process.env.JWT_SECRET,  {
+      expiresIn: process.env.JWT_EXPIRES_IN,
+    });
     console.log('Login successful:', user); // Log successful login
-    res.status(200).json({ message: `You are logged in with username: ${username}` });
+    return res.status(200).json({ message: `You are logged in with username: ${username}`,
+      token, // Send the token to the client
+      tokenusername: user.username, });
   } catch (error) {
     console.error('Error logging in:', error);
-    res.status(500).json({ message: 'Login failed', error });
+    return res.status(500).json({ message: 'Login failed', error });
   }
 });
 

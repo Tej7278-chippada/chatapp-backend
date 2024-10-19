@@ -1,10 +1,11 @@
 const express = require('express');
 const mongoose = require('mongoose');
+require('dotenv').config(); // Load .env variables
+const authRoutes = require('./routes/authRoutes');
 
 const cors = require('cors');
-require('dotenv').config();
 
-const authRoutes = require('./routes/authRoutes');
+
 const app = express();
 
 // Add these lines to parse JSON and URL-encoded data
@@ -15,10 +16,7 @@ app.use(express.urlencoded({ extended: true })); // for parsing application/x-ww
 // Allow CORS
 app.use(cors());
 
-// Connect to MongoDB
-mongoose.connect('mongodb://localhost:27017/chatapp-tej')
-  .then(() => console.log('MongoDB Connected'))
-  .catch(err => console.error('MongoDB Connection Error:', err));
+
 
 // const connectDB = async () => {
 //   try {
@@ -45,6 +43,12 @@ app.get('/api/messages', async (req, res) => {
 app.use('/api/auth', authRoutes);
 
 const PORT = process.env.PORT || 5002;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+
+// Connect to MongoDB
+mongoose.connect(process.env.MONGO_URI)
+  .then(() => { 
+    console.log('MongoDB Connected');
+    app.listen(PORT, () => 
+      console.log(`Server running on port ${PORT}`));
+  }) .catch(err => console.error('MongoDB Connection Error:', err));
+
