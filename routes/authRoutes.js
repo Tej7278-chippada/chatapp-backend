@@ -6,7 +6,7 @@ const User = require('../models/userModel');
 const router = express.Router();
 
 // Secret key for JWT (make sure this is in your .env file)
-const JWT_SECRET = process.env.JWT_SECRET || 'qwertyuiop'; //secret key
+// const JWT_SECRET = process.env.JWT_SECRET || 'qwertyuiop'; //secret key
 
 // POST /api/auth/register
 router.post('/register', async (req, res) => {
@@ -88,13 +88,13 @@ router.post('/login', async (req, res) => {
     }
 
     // Generate a JWT token valid for 1 hour
-    const token = jwt.sign({ id: user._id, tokenusername: user.username }, process.env.JWT_SECRET,  {
+    const authToken = jwt.sign({ id: user._id, tokenUsername: user.username }, process.env.JWT_SECRET,  {
       expiresIn: process.env.JWT_EXPIRES_IN,
     });
     console.log('Login successful:', user); // Log successful login
     return res.status(200).json({ message: `You are logged in with username: ${username}`,
-      token, // Send the token to the client
-      tokenusername: user.username, });
+      authToken, // Send the token to the client
+      tokenUsername: user.username, });
   } catch (error) {
     console.error('Error logging in:', error);
     return res.status(500).json({ message: 'Login failed', error });
