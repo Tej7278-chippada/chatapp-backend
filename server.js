@@ -2,7 +2,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 require('dotenv').config(); // Load .env variables
 const authRoutes = require('./routes/authRoutes');
-
+const userRoutes = require('./routes/authRoutes');
 const cors = require('cors');
 
 
@@ -41,6 +41,7 @@ app.get('/api/messages', async (req, res) => {
 
 // Define routes
 app.use('/api/auth', authRoutes);
+app.use('/api/users', userRoutes); // Mount the user routes at /api/users
 
 const PORT = process.env.PORT || 5002;
 

@@ -4,6 +4,7 @@ const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
 const User = require('../models/userModel');
 const router = express.Router();
+const { searchUsernames } = require('../controllers/userController');
 
 // Secret key for JWT (make sure this is in your .env file)
 // const JWT_SECRET = process.env.JWT_SECRET || 'qwertyuiop'; //secret key
@@ -100,5 +101,7 @@ router.post('/login', async (req, res) => {
     return res.status(500).json({ message: 'Login failed', error });
   }
 });
+
+router.get('/search', searchUsernames); // Define search route
 
 module.exports = router;
