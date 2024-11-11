@@ -6,13 +6,19 @@ const bcrypt = require('bcryptjs');
 const userSchema = new mongoose.Schema({
   username: { type: String, required: true, unique: true },
   password: { type: String, required: true },
+  email: { type: String, required: true, unique: true },
+  phone: { type: String, required: true },
+  otp: { type: Number },
+  otpExpiry: { type: Date }
 });
 
 // Hash the password before saving the user
 userSchema.pre('save', async function (next) {
   if (!this.isModified('password')) return next(); // Only hash if the password is new or modified
   try {
-    this.password = await bcrypt.hash(this.password, 12); // Hashing the password with 12 salt rounds
+    if (this.isNew) {
+      this.password = await bcrypt.hash(this.password, 12); // Hashing the password with 12 salt rounds
+    }
     console.log('Hashed password:', this.password); // Log the hashed password for debugging
     next();
   } catch (err) {

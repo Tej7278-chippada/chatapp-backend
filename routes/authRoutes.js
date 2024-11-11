@@ -1,17 +1,34 @@
+// routes/authRoutes.js
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
 const User = require('../models/userModel');
 const router = express.Router();
-const { searchUsernames } = require('../controllers/userController');
+const { searchUsernames, requestOtp, resetPassword } = require('../controllers/userController');
+const nodemailer = require('nodemailer');
+const twilio = require('twilio');
 
 // Secret key for JWT (make sure this is in your .env file)
 // const JWT_SECRET = process.env.JWT_SECRET || 'qwertyuiop'; //secret key
 
+
+// Set up Nodemailer transporter
+const transporter = nodemailer.createTransport({
+  service: 'Gmail',
+  auth: {
+    user: process.env.EMAIL_USER, // your email
+    pass: process.env.EMAIL_PASS  // your email password
+  }
+});
+
+// Initialize Twilio client
+const twilioClient = twilio(process.env.TWILIO_SID, process.env.TWILIO_AUTH_TOKEN);
+
+
 // POST /api/auth/register
 router.post('/register', async (req, res) => {
-  const { username, password } = req.body;
+  const { username, password, phone, email } = req.body;
 
   // Username and password validation
   const usernameRegex = /^[A-Z][A-Za-z0-9@_-]{5,}$/;
@@ -39,7 +56,7 @@ router.post('/register', async (req, res) => {
     }
 
     // Create and save the new user
-    const newUser = new User({ username, password });
+    const newUser = new User({ username, password, phone, email});
     await newUser.save();
 
     console.log('Registered user:', newUser); // Log the newly saved user
@@ -103,5 +120,67 @@ router.post('/login', async (req, res) => {
 });
 
 router.get('/search', searchUsernames); // Define search route
+// router.post('/forgot-password', requestOtp);
+// router.post('/reset-password', resetPassword);
+
+// Route to request OTP
+router.post('/request-otp', async (req, res) => {
+  const { username, contact } = req.body;
+  const otp = Math.floor(100000 + Math.random() * 900000); // Generate 6-digit OTP
+
+  try {
+    const user = await User.findOne({ username, $or: [{ email: contact }, { phone: contact }] });
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Save OTP to user document with expiration
+    user.otp = otp;
+    user.otpExpiry = Date.now() + 10 * 60000; // OTP valid for 10 minutes
+    await user.save();
+
+    // Send OTP via email or SMS
+    if (contact.includes('@')) {
+      await transporter.sendMail({
+        to: contact,
+        subject: 'Password Reset OTP',
+        text: `Your Chat App account password reset OTP is ${otp}. It is valid for 10 minutes.`
+      });
+    } else {
+      await twilioClient.messages.create({
+        to: contact,
+        from: process.env.TWILIO_PHONE_NUMBER,
+        body: `Your Chat App account password reset OTP is ${otp}. It is valid for 10 minutes.`
+      });
+    }
+
+    res.json({ message: 'OTP sent successfully' });
+  } catch (error) {
+    res.status(500).json({ message: 'Error requesting OTP', error });
+  }
+});
+
+// Route to reset password
+router.post('/reset-password', async (req, res) => {
+  const { username, contact, otp, newPassword } = req.body;
+
+  try {
+    const user = await User.findOne({ username, $or: [{ email: contact }, { phone: contact }] });
+    if (!user || user.otp !== parseInt(otp) || Date.now() > user.otpExpiry) {
+      return res.status(400).json({ message: 'Invalid OTP or OTP expired' });
+    }
+
+    // Hash new password and update user document
+    user.password = await bcrypt.hash(newPassword, 12);
+    user.otp = null; // Clear OTP after successful reset
+    user.otpExpiry = null;
+    await user.save();
+    console.log('Hashed password 10 to 12:', user.password);
+
+    res.json({ message: 'Password reset successful' });
+  } catch (error) {
+    res.status(500).json({ message: 'Error resetting password', error });
+  }
+});
 
 module.exports = router;
