@@ -129,14 +129,22 @@ router.post('/request-otp', async (req, res) => {
   const otp = Math.floor(100000 + Math.random() * 900000); // Generate 6-digit OTP
 
   try {
-    const user = await User.findOne({ username, $or: [{ email: contact }, { phone: contact }] });
+    // Check if the user exists with the provided username
+    const user = await User.findOne({ username });
     if (!user) {
-      return res.status(404).json({ message: 'User not found' });
+      return res.status(404).json({ message: "Username doesn't match to any existed username" });
     }
 
+    // Check if the contact matches user's email or phone
+    const isContactMatched = user.email === contact || user.phone === contact;
+    if (!isContactMatched) {
+      return res.status(400).json({ message: `Entered email or phone number doesn't match the ${username} data` });
+    }
+    // Set OTP expiration in IST time by adding 10 minutes
+    const otpExpiryIST = new Date(new Date().getTime() + 10 * 60000 + 5.5 * 60 * 60000); // Convert 10 mins to IST
     // Save OTP to user document with expiration
     user.otp = otp;
-    user.otpExpiry = Date.now() + 10 * 60000; // OTP valid for 10 minutes
+    user.otpExpiry = otpExpiryIST; // OTP valid for 10 minutes in IST
     await user.save();
 
     // Send OTP via email or SMS
@@ -144,13 +152,13 @@ router.post('/request-otp', async (req, res) => {
       await transporter.sendMail({
         to: contact,
         subject: 'Password Reset OTP',
-        text: `Your Chat App account password reset OTP is ${otp}. It is valid for 10 minutes.`
+        text: `Your TejChat App account password reset OTP is ${otp}. It is valid for 10 minutes.`
       });
     } else {
       await twilioClient.messages.create({
         to: contact,
         from: process.env.TWILIO_PHONE_NUMBER,
-        body: `Your Chat App account password reset OTP is ${otp}. It is valid for 10 minutes.`
+        body: `Your TejChat App account password reset OTP is ${otp}. It is valid for 10 minutes.`
       });
     }
 
@@ -160,6 +168,47 @@ router.post('/request-otp', async (req, res) => {
   }
 });
 
+// Route to resend OTP
+router.post('/resend-otp', async (req, res) => {
+  const { username, contact } = req.body;
+  const otp = Math.floor(100000 + Math.random() * 900000); // Generate new 6-digit OTP
+
+  try {
+    const user = await User.findOne({ username });
+    if (!user || (user.email !== contact && user.phone !== contact)) {
+      return res.status(400).json({ message: "User not found or contact does not match" });
+    }
+
+    // Update OTP and expiry time
+    // Set OTP expiration in IST time by adding 10 minutes
+    const otpExpiryIST = new Date(new Date().getTime() + 10 * 60000 + 5.5 * 60 * 60000); // Convert 10 mins to IST
+    // Save OTP to user document with expiration
+    user.otp = otp;
+    user.otpExpiry = otpExpiryIST; // OTP valid for 10 minutes in IST
+    await user.save();
+
+    // Send OTP via email or SMS
+    if (contact.includes('@')) {
+      await transporter.sendMail({
+        to: contact,
+        subject: 'Password Reset OTP',
+        text: `Your TejChat App new OTP is ${otp}. It is valid for 10 minutes.`,
+      });
+    } else {
+      await twilioClient.messages.create({
+        to: contact,
+        from: process.env.TWILIO_PHONE_NUMBER,
+        body: `Your TejChat App new OTP is ${otp}. It is valid for 10 minutes.`,
+      });
+    }
+
+    res.json({ message: 'New OTP sent successfully' });
+  } catch (error) {
+    res.status(500).json({ message: 'Error resending OTP', error });
+  }
+});
+
+
 // Route to reset password
 router.post('/reset-password', async (req, res) => {
   const { username, contact, otp, newPassword } = req.body;
@@ -167,7 +216,12 @@ router.post('/reset-password', async (req, res) => {
   try {
     const user = await User.findOne({ username, $or: [{ email: contact }, { phone: contact }] });
     if (!user || user.otp !== parseInt(otp) || Date.now() > user.otpExpiry) {
-      return res.status(400).json({ message: 'Invalid OTP or OTP expired' });
+      return res.status(400).json({ message: 'Entered OTP is invalid or OTP expired' });
+    }
+    // Check if new password is different from the existing password
+    const isSamePassword = await bcrypt.compare(newPassword, user.password);
+    if (isSamePassword) {
+      return res.status(400).json({ message: 'New password must be different from the old password' });
     }
 
     // Hash new password and update user document
@@ -175,7 +229,7 @@ router.post('/reset-password', async (req, res) => {
     user.otp = null; // Clear OTP after successful reset
     user.otpExpiry = null;
     await user.save();
-    console.log('Hashed password 10 to 12:', user.password);
+    console.log('New password is :', user.password);
 
     res.json({ message: 'Password reset successful' });
   } catch (error) {
