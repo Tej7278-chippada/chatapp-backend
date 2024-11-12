@@ -49,10 +49,15 @@ router.post('/register', async (req, res) => {
     //     if (password !== confirmPassword) {
     //         return res.status(400).json({ message: 'Passwords do not match' });
     //     }
-    // Check if user already exists
-    const existingUser = await User.findOne({ username });
+    // Check if username or email already exists
+    const existingUser = await User.findOne({ $or: [{ username }, { email }] });
     if (existingUser) {
-      return res.status(400).json({ message: 'Username already exists' });
+      if (existingUser.username === username) {
+        return res.status(400).json({ message: `Username ${username} already exists.` });
+      }
+      if (existingUser.email === email) {
+        return res.status(400).json({ message: `The email ${email} is already registered with another account, use another email instead.` });
+      }
     }
 
     // Create and save the new user
@@ -60,7 +65,7 @@ router.post('/register', async (req, res) => {
     await newUser.save();
 
     console.log('Registered user:', newUser); // Log the newly saved user
-    res.status(201).json({ message: `Your new account created with username: ${newUser.username}` });
+    res.status(201).json({ message: `Your new account created with username: ${newUser.username} and ${newUser.email}` });
   } catch (error) {
     console.error('Error registering user:', error);
     res.status(500).json({ message: 'Error registering user', error });
@@ -90,29 +95,36 @@ router.post('/register', async (req, res) => {
 
 // Login Route
 router.post('/login', async (req, res) => {
-  const { username, password } = req.body;
+  const { identifier, password } = req.body; // Use "identifier" to accept either email or username
 
   try {
-    // const { username, password } = req.body;
-    const user = await User.findOne({ username });
+    // Determine if identifier is an email or username
+    const query = identifier.includes('@') ? { email: identifier } : { username: identifier };
+
+    // Find user by either username or email
+    const user = await User.findOne(query);
     if (!user) {
-      return res.status(404).json({ message: `Username ${username} doesn't exist.` });
+      return res.status(404).json({ message: `${identifier.includes('@') ? 'Email' : 'Username'} ${identifier} doesn't exist.` });
     }
 
-    // Compare passwords
-    const isPasswordMatch = await user.comparePassword(password);
+    // Compare the provided password with the hashed password stored in the database
+    const isPasswordMatch = await bcrypt.compare(password, user.password);
     if (!isPasswordMatch) {
-      return res.status(401).json({ message: `Password doesn't match for username: ${username}` });
+      return res.status(401).json({ message: `Entered password doesn't match to ${identifier.includes('@') ? 'Email' : 'Username'} ${identifier} 's data.` });
     }
 
-    // Generate a JWT token valid for 1 hour
-    const authToken = jwt.sign({ id: user._id, tokenUsername: user.username }, process.env.JWT_SECRET,  {
-      expiresIn: process.env.JWT_EXPIRES_IN,
+    // Generate a JWT token valid for a specified period
+    const authToken = jwt.sign({ id: user._id, tokenUsername: user.username }, process.env.JWT_SECRET, {
+      expiresIn: process.env.JWT_EXPIRES_IN || '1h',
     });
     console.log('Login successful:', user); // Log successful login
-    return res.status(200).json({ message: `You are logged in with username: ${username}`,
-      authToken, // Send the token to the client
-      tokenUsername: user.username, });
+
+    // Respond with success message, token, and username
+    return res.status(200).json({
+      message: `You are logged in with ${identifier.includes('@') ? 'email' : 'username'}: ${identifier}`,
+      authToken,
+      tokenUsername: user.username,
+    });
   } catch (error) {
     console.error('Error logging in:', error);
     return res.status(500).json({ message: 'Login failed', error });
